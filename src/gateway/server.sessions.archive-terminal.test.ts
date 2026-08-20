@@ -28,18 +28,21 @@ test("sessions.patch closes only the exact terminal session incarnation", async 
   const replacementOwner = agentTerminalOwner(sessionKey, "S2");
   const unrelatedOwner = agentTerminalOwner("agent:main:unrelated", "U1");
   const [oldPty, replacementPty, unrelatedPty] = [makeFakePty(), makeFakePty(), makeFakePty()];
-  const ptys = [oldPty, replacementPty, unrelatedPty];
   const manager = new TerminalSessionManager({
     emit: vi.fn(),
-    spawn: async () => ptys.shift() ?? oldPty,
+    spawn: async () => makeFakePty(),
   });
   await writeSessionStore({
     entries: { [sessionKey]: sessionStoreEntry(oldOwner.agentSessionId) },
   });
   const [oldSession, replacementSession, unrelatedSession] = await Promise.all([
-    manager.open(baseOpenRequest({ owner: oldOwner })),
-    manager.open(baseOpenRequest({ owner: replacementOwner })),
-    manager.open(baseOpenRequest({ owner: unrelatedOwner })),
+    manager.open(baseOpenRequest({ owner: oldOwner, createBackend: async () => oldPty })),
+    manager.open(
+      baseOpenRequest({ owner: replacementOwner, createBackend: async () => replacementPty }),
+    ),
+    manager.open(
+      baseOpenRequest({ owner: unrelatedOwner, createBackend: async () => unrelatedPty }),
+    ),
   ]);
   if (!oldSession.ok || !replacementSession.ok || !unrelatedSession.ok) {
     throw new Error("expected terminal sessions");
