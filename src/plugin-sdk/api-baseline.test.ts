@@ -428,6 +428,28 @@ describe("Plugin SDK API baseline", () => {
     expect(JSON.stringify(diff).match(/type SharedOptions/g)).toHaveLength(2);
   });
 
+  it("reports a declaration-only diff as release-relevant", () => {
+    const diff: PluginSdkApiDiff = {
+      declarationChanges: [
+        {
+          affectedExports: [],
+          after: "type SharedOptions = { channelId: string };",
+          before: "type SharedOptions = { accountId: string };",
+          name: "SharedOptions",
+        },
+      ],
+      digest: "a".repeat(64),
+      entrypointsAdded: [],
+      entrypointsRemoved: [],
+      exports: [],
+    };
+
+    expect(hasPluginSdkApiChanges(diff)).toBe(true);
+    expect(formatPluginSdkApiDiffReport({ baseLabel: "base", diff, headLabel: "head" })).toContain(
+      "Reachable declarations changed",
+    );
+  });
+
   it("validates renderer artifacts at the subprocess boundary", async () => {
     const baseline = await renderSourceFixture({
       "fixture.ts": "export type Fixture = { value: string };\n",

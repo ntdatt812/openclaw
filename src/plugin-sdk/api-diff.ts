@@ -415,6 +415,7 @@ export function diffPluginSdkApi(
 
 export function hasPluginSdkApiChanges(diff: PluginSdkApiDiff): boolean {
   return (
+    diff.declarationChanges.length > 0 ||
     diff.entrypointsAdded.length > 0 ||
     diff.entrypointsRemoved.length > 0 ||
     diff.exports.length > 0
