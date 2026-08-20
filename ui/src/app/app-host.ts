@@ -4,7 +4,6 @@ import "../components/app-topbar.ts";
 import "../components/macos-titlebar-controls.ts";
 import "../components/modal-dialog.ts";
 import { formatDocumentTitle, titleForRoute } from "../app-navigation.ts";
-import "../components/onboarding-memory-import.ts";
 import "../components/resizable-divider.ts";
 import "../components/sidebar-update-card.ts";
 import "../components/update-banner.ts";
@@ -67,7 +66,9 @@ import {
   CUSTODIAN_PANEL_ELEMENT,
   DESKTOP_PANEL_ELEMENT,
   EXEC_APPROVAL_ELEMENT,
+  isOptionalElementDefined,
   LazyCustomElementRequestController,
+  ONBOARDING_MEMORY_IMPORT_ELEMENT,
   TERMINAL_PANEL_ELEMENT,
 } from "./lazy-custom-element.ts";
 import { hasStoredLazyShellAction } from "./lazy-shell-action.ts";
@@ -142,12 +143,33 @@ class OpenClawShell
   readonly desktopPanelElement = DESKTOP_PANEL_ELEMENT;
   readonly custodianPanelElement = CUSTODIAN_PANEL_ELEMENT;
   readonly execApprovalElement = EXEC_APPROVAL_ELEMENT;
+  readonly onboardingMemoryImportElement = ONBOARDING_MEMORY_IMPORT_ELEMENT;
   readonly lazyCustomElements = new LazyCustomElementRequestController(
     this,
     () => this.shellChrome.cancelPendingLazyAction(),
     () =>
       hasStoredLazyShellAction() ? retryStaleChunkReloadWhenReachable() : Promise.resolve(false),
   );
+  private onboardingMemoryImportRequested = false;
+
+  ensureOnboardingMemoryImport(active: boolean): void {
+    if (!active) {
+      if (this.lazyCustomElements.visibleState?.element === this.onboardingMemoryImportElement) {
+        this.lazyCustomElements.abandon();
+      }
+      this.onboardingMemoryImportRequested = false;
+      return;
+    }
+    if (
+      this.onboardingMemoryImportRequested ||
+      this.lazyCustomElements.visibleState ||
+      isOptionalElementDefined(this.onboardingMemoryImportElement)
+    ) {
+      return;
+    }
+    this.onboardingMemoryImportRequested = true;
+    this.lazyCustomElements.request(this.onboardingMemoryImportElement);
+  }
   @query("openclaw-command-palette") commandPalette: CommandPaletteElement | undefined;
   @query("openclaw-exec-approval")
   approvalOverlay: (HTMLElement & { show(): void; dialogOpen?: boolean }) | undefined;

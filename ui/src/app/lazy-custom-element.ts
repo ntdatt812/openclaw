@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.ts";
 import {
   isStaleChunkImportError,
   retryStaleChunkReloadWhenReachable,
@@ -165,6 +166,12 @@ export const COMMAND_PALETTE_ELEMENT = {
   tagName: "openclaw-command-palette",
   label: "command palette",
   loadModule: () => import("../components/command-palette.ts"),
+} satisfies OptionalCustomElement;
+
+export const ONBOARDING_MEMORY_IMPORT_ELEMENT = {
+  tagName: "openclaw-onboarding-memory-import",
+  label: t("onboarding.memoryImport.title"),
+  loadModule: () => import("../components/onboarding-memory-import.ts"),
 } satisfies OptionalCustomElement;
 
 const DEBUG_OVERLAY_TAG = "openclaw-debug-overlay";

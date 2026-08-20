@@ -99,6 +99,7 @@ export interface ShellViewHost {
   readonly custodianMinimizeRequestId: number;
   readonly desktopNavigationExpanded: boolean;
   readonly execApprovalElement: OptionalCustomElement;
+  readonly onboardingMemoryImportElement: OptionalCustomElement;
   readonly lazyCustomElements: LazyCustomElementRequestController;
   readonly nativeHistoryState: NativeHistoryState;
   readonly navDrawerOpen: boolean;
@@ -116,6 +117,7 @@ export interface ShellViewHost {
   readonly devicePairSetupLoadFailed: boolean;
   loadDevicePairSetupRenderer(): void;
   loadSettingsSidebarRenderer(): void;
+  ensureOnboardingMemoryImport(active: boolean): void;
   retryDevicePairSetupRenderer(): void;
   retrySettingsSidebarRenderer(): void;
   closeNavDrawer(options?: { restoreFocus?: boolean }): void;
@@ -299,6 +301,7 @@ export function renderApplicationShell(host: ShellViewHost) {
     canAdmin: operatorAccess.canAdmin,
   });
   const onboarding = host.onboardingMode;
+  host.ensureOnboardingMemoryImport(onboarding && activeRoute !== "custodian");
   const navDrawerOpen = host.navDrawerOpen && !onboarding;
   const mobileNavLayout = isMobileNavLayout();
   const mergedChatChrome = shouldMergeChatChrome({
@@ -707,7 +710,9 @@ export function renderApplicationShell(host: ShellViewHost) {
           host.navigate("apps");
         },
       })}
-      ${onboarding && activeRoute !== "custodian"
+      ${onboarding &&
+      activeRoute !== "custodian" &&
+      isOptionalElementDefined(host.onboardingMemoryImportElement)
         ? html`<openclaw-onboarding-memory-import
             .active=${true}
             .context=${context}
