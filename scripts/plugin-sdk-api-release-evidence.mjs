@@ -43,6 +43,7 @@ function diffPayload(diff) {
 
 function hasChanges(payload) {
   return (
+    payload.declarationChanges.length > 0 ||
     payload.entrypointsAdded.length > 0 ||
     payload.entrypointsRemoved.length > 0 ||
     payload.exports.length > 0

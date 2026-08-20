@@ -76,6 +76,35 @@ describe("Plugin SDK API release evidence", () => {
     expect(validate(expected)).toMatchObject({ acknowledgement: expected, hasChanges: true });
   });
 
+  it("requires acknowledgement for a declaration-only v2 diff", () => {
+    const payload = {
+      declarationChanges: [{ affectedExports: [0], change: "modified", name: "Options" }],
+      entrypointsAdded: [],
+      entrypointsRemoved: [],
+      exports: [],
+    };
+    const receipt = createPluginSdkApiReleaseEvidence({
+      baseRef: "v2026.8.1",
+      baseSha,
+      diff: {
+        ...payload,
+        digest: createHash("sha256").update(JSON.stringify(payload), "utf8").digest("hex"),
+      },
+      headSha,
+      workflowSha,
+    });
+    const expected = receipt.digest.slice(0, 8);
+
+    expect(() =>
+      validatePluginSdkApiReleaseEvidence({
+        acknowledgement: "",
+        evidence: receipt,
+        expectedHeadSha: headSha,
+        expectedWorkflowSha: workflowSha,
+      }),
+    ).toThrow(`require acknowledgement digest ${expected}`);
+  });
+
   it("accepts a blank acknowledgement when the frozen diff has no changes", () => {
     expect(
       validatePluginSdkApiReleaseEvidence({
