@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const PLUGIN_SDK_API_RELEASE_EVIDENCE_SCHEMA = "openclaw.plugin-sdk-api-release-evidence/v1";
+const PLUGIN_SDK_API_RELEASE_EVIDENCE_SCHEMA = "openclaw.plugin-sdk-api-release-evidence/v2";
 
 const SHA_PATTERN = /^[a-f0-9]{40}$/u;
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/u;
@@ -24,6 +24,7 @@ function assertSha(value, label) {
 function diffPayload(diff) {
   if (
     !isReleaseEvidenceObject(diff) ||
+    !Array.isArray(diff.declarationChanges) ||
     !Array.isArray(diff.entrypointsAdded) ||
     !Array.isArray(diff.entrypointsRemoved) ||
     !Array.isArray(diff.exports) ||
@@ -33,6 +34,7 @@ function diffPayload(diff) {
     throw new Error("Plugin SDK API release evidence contains an invalid diff");
   }
   return {
+    declarationChanges: diff.declarationChanges,
     entrypointsAdded: diff.entrypointsAdded,
     entrypointsRemoved: diff.entrypointsRemoved,
     exports: diff.exports,

@@ -15,7 +15,7 @@ const workflowSha = "d".repeat(40);
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 
 function diff(exports: unknown[] = []) {
-  const payload = { entrypointsAdded: [], entrypointsRemoved: [], exports };
+  const payload = { declarationChanges: [], entrypointsAdded: [], entrypointsRemoved: [], exports };
   return {
     ...payload,
     digest: createHash("sha256").update(JSON.stringify(payload), "utf8").digest("hex"),

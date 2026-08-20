@@ -316,11 +316,9 @@ describe("Plugin SDK API baseline", () => {
       ]);
     }
     const combinedDiff = diffPluginSdkApi(baseline, combined);
-    expect(
-      combinedDiff.exports.flatMap((change) =>
-        change.declarationChanges.map((declaration) => declaration.name),
-      ),
-    ).toEqual(expect.arrayContaining(["SendOptions", "SendResult"]));
+    expect(combinedDiff.declarationChanges.map((declaration) => declaration.name)).toEqual(
+      expect.arrayContaining(["SendOptions", "SendResult"]),
+    );
     expect(hasPluginSdkApiChanges(combinedDiff)).toBe(true);
     expect(pluginSdkApiAcknowledgement(combinedDiff)).toMatch(/^[a-f0-9]{8}$/u);
     expect(
@@ -369,19 +367,23 @@ describe("Plugin SDK API baseline", () => {
     expect(addedDiff.exports).toEqual([
       expect.objectContaining({
         change: "added",
-        declarationChanges: expect.arrayContaining([
-          expect.objectContaining({ after: expect.stringContaining("value: number") }),
-        ]),
         entrypoint: "added",
         exportName: "createAdded",
       }),
     ]);
+    expect(addedDiff.declarationChanges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ after: expect.stringContaining("value: number") }),
+      ]),
+    );
     expect(removedDiff.exports[0]).toMatchObject({
       change: "removed",
-      declarationChanges: expect.arrayContaining([
+    });
+    expect(removedDiff.declarationChanges).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({ before: expect.stringContaining("value: number") }),
       ]),
-    });
+    );
     expect(addedDiff.digest).not.toBe(diffPluginSdkApi(before, sameNamesDifferentContents).digest);
     expect(
       formatPluginSdkApiDiffReport({ baseLabel: "base", diff: addedDiff, headLabel: "head" }),
@@ -407,7 +409,23 @@ describe("Plugin SDK API baseline", () => {
       expect.objectContaining({ change: "signature", exportName: "SendOptions" }),
       expect.objectContaining({ change: "reachable", exportName: "send" }),
     ]);
-    expect(diff.exports.every((change) => change.declarationChanges.length > 0)).toBe(true);
+    expect(diff.declarationChanges.every((change) => change.affectedExports.length > 0)).toBe(true);
+  });
+
+  it("stores shared reachable declarations once in the machine-readable diff", async () => {
+    const render = (field: string) =>
+      renderSourceFixture({
+        "fixture.ts": [
+          `type SharedOptions = { text: string; ${field}: string };`,
+          "export declare function send(options: SharedOptions): void;",
+          "export declare function preview(options: SharedOptions): void;",
+        ].join("\n"),
+      });
+    const diff = diffPluginSdkApi(await render("accountId"), await render("channelId"));
+    const shared = diff.declarationChanges.find((change) => change.name === "SharedOptions");
+
+    expect(shared?.affectedExports).toEqual([0, 1]);
+    expect(JSON.stringify(diff).match(/type SharedOptions/g)).toHaveLength(2);
   });
 
   it("validates renderer artifacts at the subprocess boundary", async () => {
@@ -442,6 +460,7 @@ describe("Plugin SDK API baseline", () => {
 
   it("bounds reports by UTF-8 bytes without splitting multibyte text", () => {
     const diff: PluginSdkApiDiff = {
+      declarationChanges: [],
       digest: "a".repeat(64),
       entrypointsAdded: [],
       entrypointsRemoved: [],
@@ -454,7 +473,6 @@ describe("Plugin SDK API baseline", () => {
           },
           before: null,
           change: "added",
-          declarationChanges: [],
           entrypoint: "fixture",
           exportName: "Wide",
           importSpecifier: "openclaw/plugin-sdk/fixture",

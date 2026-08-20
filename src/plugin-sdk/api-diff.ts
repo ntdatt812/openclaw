@@ -34,6 +34,7 @@ export type PluginSdkApiDiffSurface = {
 };
 
 export type PluginSdkApiDeclarationChange = {
+  affectedExports: number[];
   after: string | null;
   before: string | null;
   name: string;
@@ -43,7 +44,6 @@ export type PluginSdkApiExportChange = {
   after: PluginSdkApiExportSnapshot | null;
   before: PluginSdkApiExportSnapshot | null;
   change: "added" | "reachable" | "removed" | "signature";
-  declarationChanges: PluginSdkApiDeclarationChange[];
   entrypoint: string;
   exportName: string;
   importSpecifier: string;
@@ -56,6 +56,7 @@ export type PluginSdkApiEntrypointChange = {
 };
 
 export type PluginSdkApiDiffPayload = {
+  declarationChanges: PluginSdkApiDeclarationChange[];
   entrypointsAdded: PluginSdkApiEntrypointChange[];
   entrypointsRemoved: PluginSdkApiEntrypointChange[];
   exports: PluginSdkApiExportChange[];
@@ -213,7 +214,7 @@ function sectionKey(section: PluginSdkApiDeclarationSection): string {
 function collectDeclarationChanges(
   before: readonly PluginSdkApiDeclarationSection[],
   after: readonly PluginSdkApiDeclarationSection[],
-): PluginSdkApiDeclarationChange[] {
+): Omit<PluginSdkApiDeclarationChange, "affectedExports">[] {
   const beforeByKey = new Map((before ?? []).map((section) => [sectionKey(section), section]));
   const afterByKey = new Map((after ?? []).map((section) => [sectionKey(section), section]));
   const removedByName = new Map<string, string[]>();
@@ -230,7 +231,7 @@ function collectDeclarationChanges(
   }
 
   const names = new Set([...removedByName.keys(), ...addedByName.keys()]);
-  const changes: PluginSdkApiDeclarationChange[] = [];
+  const changes: Omit<PluginSdkApiDeclarationChange, "affectedExports">[] = [];
   for (const name of [...names].toSorted(compareText)) {
     const removed = (removedByName.get(name) ?? []).toSorted(compareText);
     const added = (addedByName.get(name) ?? []).toSorted(compareText);
@@ -244,6 +245,25 @@ function collectDeclarationChanges(
     }
   }
   return changes;
+}
+
+function registerDeclarationChanges(
+  declarations: PluginSdkApiDeclarationChange[],
+  declarationIdsByKey: Map<string, number>,
+  changes: readonly Omit<PluginSdkApiDeclarationChange, "affectedExports">[],
+  affectedExport: number,
+): void {
+  for (const change of changes) {
+    const key = `${change.name}\0${change.before ?? ""}\0${change.after ?? ""}`;
+    const existingId = declarationIdsByKey.get(key);
+    if (existingId !== undefined) {
+      declarations[existingId]?.affectedExports.push(affectedExport);
+      continue;
+    }
+    const id = declarations.length;
+    declarationIdsByKey.set(key, id);
+    declarations.push({ ...change, affectedExports: [affectedExport] });
+  }
 }
 
 function exportSections(
@@ -289,10 +309,12 @@ export function diffPluginSdkApi(
   );
   const entrypoints = new Set([...beforeModules.keys(), ...afterModules.keys()]);
   const payload: PluginSdkApiDiffPayload = {
+    declarationChanges: [],
     entrypointsAdded: [],
     entrypointsRemoved: [],
     exports: [],
   };
+  const declarationIdsByKey = new Map<string, number>();
 
   for (const entrypoint of [...entrypoints].toSorted(compareText)) {
     const beforeModule = beforeModules.get(entrypoint);
@@ -314,12 +336,23 @@ export function diffPluginSdkApi(
     for (const exportName of [...exportNames].toSorted(compareText)) {
       const beforeExport = beforeExports.get(exportName);
       const afterExport = afterExports.get(exportName);
+      const affectedExport = payload.exports.length;
+      const recordDeclarationChanges = (
+        beforeSections: PluginSdkApiDeclarationSection[],
+        afterSections: PluginSdkApiDeclarationSection[],
+      ): void =>
+        registerDeclarationChanges(
+          payload.declarationChanges,
+          declarationIdsByKey,
+          collectDeclarationChanges(beforeSections, afterSections),
+          affectedExport,
+        );
       if (!beforeExport && afterExport) {
+        recordDeclarationChanges([], exportSections(after, afterExport));
         payload.exports.push({
           after: snapshot(afterExport),
           before: null,
           change: "added",
-          declarationChanges: collectDeclarationChanges([], exportSections(after, afterExport)),
           entrypoint,
           exportName,
           importSpecifier: moduleSurface.importSpecifier,
@@ -327,11 +360,11 @@ export function diffPluginSdkApi(
         continue;
       }
       if (beforeExport && !afterExport) {
+        recordDeclarationChanges(exportSections(before, beforeExport), []);
         payload.exports.push({
           after: null,
           before: snapshot(beforeExport),
           change: "removed",
-          declarationChanges: collectDeclarationChanges(exportSections(before, beforeExport), []),
           entrypoint,
           exportName,
           importSpecifier: moduleSurface.importSpecifier,
@@ -345,27 +378,27 @@ export function diffPluginSdkApi(
         beforeExport.kind !== afterExport.kind ||
         beforeExport.declaration !== afterExport.declaration
       ) {
+        recordDeclarationChanges(
+          exportSections(before, beforeExport),
+          exportSections(after, afterExport),
+        );
         payload.exports.push({
           after: snapshot(afterExport),
           before: snapshot(beforeExport),
           change: "signature",
-          declarationChanges: collectDeclarationChanges(
-            exportSections(before, beforeExport),
-            exportSections(after, afterExport),
-          ),
           entrypoint,
           exportName,
           importSpecifier: moduleSurface.importSpecifier,
         });
       } else if (beforeExport.closureHash !== afterExport.closureHash) {
+        recordDeclarationChanges(
+          exportSections(before, beforeExport),
+          exportSections(after, afterExport),
+        );
         payload.exports.push({
           after: snapshot(afterExport),
           before: snapshot(beforeExport),
           change: "reachable",
-          declarationChanges: collectDeclarationChanges(
-            exportSections(before, beforeExport),
-            exportSections(after, afterExport),
-          ),
           entrypoint,
           exportName,
           importSpecifier: moduleSurface.importSpecifier,
@@ -446,25 +479,10 @@ function appendExportChanges(
   }
 }
 
-type DeclarationReportChange = PluginSdkApiDeclarationChange & { affectedExports: string[] };
-
-function collectDeclarationReportChanges(
-  changes: readonly PluginSdkApiExportChange[],
-): DeclarationReportChange[] {
-  const grouped = new Map<string, DeclarationReportChange>();
-  for (const change of changes) {
-    const affectedExport = `${change.importSpecifier} :: ${change.exportName}`;
-    for (const declaration of change.declarationChanges) {
-      const key = `${declaration.name}\0${declaration.before ?? ""}\0${declaration.after ?? ""}`;
-      const current = grouped.get(key);
-      if (current) {
-        current.affectedExports.push(affectedExport);
-      } else {
-        grouped.set(key, { ...declaration, affectedExports: [affectedExport] });
-      }
-    }
-  }
-  return [...grouped.values()].toSorted(
+function declarationReportChanges(
+  changes: readonly PluginSdkApiDeclarationChange[],
+): PluginSdkApiDeclarationChange[] {
+  return [...changes].toSorted(
     (left, right) =>
       compareText(left.name, right.name) ||
       compareText(left.before ?? "", right.before ?? "") ||
@@ -521,11 +539,9 @@ export function formatPluginSdkApiDiffReport(params: {
     diff.exports.filter((change) => change.change === "signature"),
   );
 
-  const reachable = collectDeclarationReportChanges(diff.exports);
+  const reachable = declarationReportChanges(diff.declarationChanges);
   if (reachable.length > 0) {
-    const affectedCount = diff.exports.filter(
-      (change) => change.declarationChanges.length > 0,
-    ).length;
+    const affectedCount = new Set(reachable.flatMap((change) => change.affectedExports)).size;
     lines.push(
       "",
       `## Reachable declarations changed (${reachable.length}; affects ${affectedCount} exports)`,
@@ -534,7 +550,11 @@ export function formatPluginSdkApiDiffReport(params: {
       lines.push("", `- \`${change.name}\``);
       appendText(lines, "before", change.before);
       appendText(lines, "after", change.after);
-      const affected = change.affectedExports.toSorted(compareText);
+      const affected = change.affectedExports
+        .map((index) => diff.exports[index])
+        .filter((value) => value !== undefined)
+        .map((value) => `${value.importSpecifier} :: ${value.exportName}`)
+        .toSorted(compareText);
       lines.push(
         `    affects: ${affected
           .slice(0, REPORT_AFFECTED_EXPORT_LIMIT)
